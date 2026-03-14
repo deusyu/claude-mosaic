@@ -120,4 +120,4 @@ jobs:
         with:
           generate_release_notes: true
           files: |
-            ClaudeMosaic-*.pkg
+            ClaudeMosaic-[0-9]*.pkg
