@@ -110,7 +110,7 @@ final class SessionDiscovery {
             case .claude:
                 transcript = resolveClaudeTranscriptFromHook(tty: tty, cwd: cwd)
             case .codex:
-                transcript = resolveCodexTranscript(cwd: cwd)
+                transcript = resolveCodexTranscript(cwd: cwd, excluding: claimedTranscripts)
             }
             if let t = transcript { claimedTranscripts.insert(t) }
 
@@ -287,7 +287,7 @@ final class SessionDiscovery {
         return mostRecentJSONL(in: projectDir, excluding: claimed)
     }
 
-    private func resolveCodexTranscript(cwd: String) -> String? {
+    private func resolveCodexTranscript(cwd: String, excluding claimed: Set<String> = []) -> String? {
         let sessionsDir = "\(home)/.codex/sessions"
         guard let enumerator = FileManager.default.enumerator(
             at: URL(fileURLWithPath: sessionsDir),
@@ -302,6 +302,7 @@ final class SessionDiscovery {
 
         while let url = enumerator.nextObject() as? URL {
             guard url.pathExtension == "jsonl" else { continue }
+            guard !claimed.contains(url.path) else { continue }
             guard let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
                   let mod = attrs[.modificationDate] as? Date else { continue }
             guard let sessionCWD = codexSessionCWD(path: url.path) else { continue }

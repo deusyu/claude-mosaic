@@ -153,8 +153,8 @@ enum TranscriptParser {
 
         // Escalation request sent but no output yet → waiting for user approval
         if !pendingEscalationIds.isEmpty { return .pending }
-        // Unresolved function calls with recent activity → active
-        if !pendingCallIds.isEmpty && fileAge < 10 { return .active }
+        // Unresolved function calls → Codex is executing (long tasks can exceed 10s)
+        if !pendingCallIds.isEmpty { return .active }
         if fileAge < 10 { return .active }
         return .idle
     }
