@@ -13,7 +13,8 @@ enum AutoSetup {
 
     private static func installHooksIfNeeded() {
         let binary = ProcessInfo.processInfo.arguments[0]
-        let hookCommand = "\(binary) hook"
+        let escaped = binary.contains(" ") ? "'\(binary)'" : binary
+        let hookCommand = "\(escaped) hook"
         HookManager.installHook(command: hookCommand)
     }
 

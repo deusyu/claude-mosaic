@@ -33,35 +33,36 @@ enum TerminalFocus {
     }
 
     private static func focusAlacritty(cwd: String) {
-        let dirName = URL(fileURLWithPath: cwd).lastPathComponent
-        Shell.appleScript("""
-        tell application "System Events"
-            set alacrittyWindows to every window of process "Alacritty"
-            repeat with w in alacrittyWindows
-                if name of w contains "\(dirName)" then
-                    perform action "AXRaise" of w
-                    set frontmost of process "Alacritty" to true
-                    return
-                end if
-            end repeat
-            set frontmost of process "Alacritty" to true
-        end tell
-        """)
+        focusByWindowTitle(process: "Alacritty", cwd: cwd)
     }
 
     private static func focusGhostty(cwd: String) {
+        focusByWindowTitle(process: "ghostty", cwd: cwd)
+    }
+
+    /// Match window title against full cwd first, then basename as fallback.
+    private static func focusByWindowTitle(process: String, cwd: String) {
         let dirName = URL(fileURLWithPath: cwd).lastPathComponent
         Shell.appleScript("""
         tell application "System Events"
-            set ghosttyWindows to every window of process "ghostty"
-            repeat with w in ghosttyWindows
-                if name of w contains "\(dirName)" then
+            set wins to every window of process "\(process)"
+            -- First pass: match full path
+            repeat with w in wins
+                if name of w contains "\(cwd)" then
                     perform action "AXRaise" of w
-                    set frontmost of process "ghostty" to true
+                    set frontmost of process "\(process)" to true
                     return
                 end if
             end repeat
-            set frontmost of process "ghostty" to true
+            -- Second pass: match basename
+            repeat with w in wins
+                if name of w contains "\(dirName)" then
+                    perform action "AXRaise" of w
+                    set frontmost of process "\(process)" to true
+                    return
+                end if
+            end repeat
+            set frontmost of process "\(process)" to true
         end tell
         """)
     }
