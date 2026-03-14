@@ -2,7 +2,7 @@ import Foundation
 
 enum HookManager {
 
-    private static let hookPatterns = ["claude-mosaic", "claude-bar", "session-track.sh", "update-status.sh"]
+    private static let hookPatterns = ["claude-mosaic", "Claude Mosaic", "claude-bar", "session-track.sh", "update-status.sh"]
     private static let home = NSHomeDirectory()
 
     // MARK: - Hook Handler (stdin → state file)

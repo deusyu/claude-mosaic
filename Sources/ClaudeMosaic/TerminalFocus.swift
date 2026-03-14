@@ -40,23 +40,14 @@ enum TerminalFocus {
         focusByWindowTitle(process: "ghostty", cwd: cwd)
     }
 
-    /// Match window title against full cwd first, then basename as fallback.
+    /// Match window title against full cwd path. No basename fallback to avoid
+    /// jumping to wrong window when multiple projects share the same directory name.
     private static func focusByWindowTitle(process: String, cwd: String) {
-        let dirName = URL(fileURLWithPath: cwd).lastPathComponent
         Shell.appleScript("""
         tell application "System Events"
             set wins to every window of process "\(process)"
-            -- First pass: match full path
             repeat with w in wins
                 if name of w contains "\(cwd)" then
-                    perform action "AXRaise" of w
-                    set frontmost of process "\(process)" to true
-                    return
-                end if
-            end repeat
-            -- Second pass: match basename
-            repeat with w in wins
-                if name of w contains "\(dirName)" then
                     perform action "AXRaise" of w
                     set frontmost of process "\(process)" to true
                     return
