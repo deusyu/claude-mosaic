@@ -35,7 +35,9 @@ enum HookManager {
         let path = settingsPath ?? "\(home)/.claude/settings.json"
         var settings = loadSettings(path: path)
 
-        cleanLegacyHooks(settings: &settings)
+        // Remove all existing claude-mosaic/legacy hooks before (re)installing.
+        // This handles upgrades where the command string changed (e.g. quoting).
+        cleanHooksByPattern(settings: &settings, patterns: hookPatterns)
 
         if hookExists(settings: settings, command: command) {
             print("Hook already installed.")
@@ -120,9 +122,8 @@ enum HookManager {
         }
     }
 
-    private static func cleanLegacyHooks(settings: inout [String: Any]) {
+    private static func cleanHooksByPattern(settings: inout [String: Any], patterns: [String]) {
         guard var hooks = settings["hooks"] as? [String: Any] else { return }
-        let legacyPatterns = ["session-track.sh", "update-status.sh"]
 
         for eventKey in hooks.keys {
             guard var matchers = hooks[eventKey] as? [[String: Any]] else { continue }
@@ -130,7 +131,7 @@ enum HookManager {
                 guard var hookList = matcher["hooks"] as? [[String: Any]] else { return matcher }
                 hookList = hookList.filter { hook in
                     guard let cmd = hook["command"] as? String else { return true }
-                    return !legacyPatterns.contains(where: { cmd.contains($0) })
+                    return !patterns.contains(where: { cmd.contains($0) })
                 }
                 if hookList.isEmpty { return nil }
                 var updated = matcher

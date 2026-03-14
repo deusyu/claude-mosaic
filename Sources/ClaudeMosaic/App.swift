@@ -117,6 +117,7 @@ class MosaicAppDelegate: NSObject, NSApplicationDelegate {
     var demoMode = false
     var demoCount: Int?
     var previousStatuses: [String: SessionStatus] = [:]
+    var isPolling = false
 
     var sessions: [SessionInfo] {
         get { store.sessions }
@@ -165,9 +166,12 @@ class MosaicAppDelegate: NSObject, NSApplicationDelegate {
             updateUI()
             return
         }
+        guard !isPolling else { return }
+        isPolling = true
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let result = SessionDiscovery.shared.discoverAll()
             DispatchQueue.main.async {
+                self?.isPolling = false
                 self?.sessions = result
                 self?.updateUI()
             }
