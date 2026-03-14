@@ -119,38 +119,42 @@ enum TranscriptParser {
     private static func determineCodexStatus(path: String, fileAge: TimeInterval) -> SessionStatus {
         let tail = readTail(path: path, maxBytes: 65536)
 
-        // Track escalation call IDs and their completions
-        var pendingEscalationIds: Set<String> = []
-        var hasPendingCall = false
+        // Track function_call / function_call_output pairing.
+        // A call is "pending" until its output arrives.
+        // Sandbox failures in output indicate the session needs user approval.
+        var pendingCallIds: Set<String> = []
+        var hasSandboxFailure = false
 
         for line in tail.split(separator: "\n") {
             guard let obj = parseJSON(String(line)) else { continue }
-            guard let type = obj["type"] as? String else { continue }
+            guard let type = obj["type"] as? String, type == "response_item" else { continue }
+            guard let payload = obj["payload"] as? [String: Any] else { continue }
+            let itemType = payload["type"] as? String
+            let callId = payload["call_id"] as? String
 
-            if type == "response_item", let payload = obj["payload"] as? [String: Any] {
-                let itemType = payload["type"] as? String
-                let callId = payload["call_id"] as? String ?? payload["id"] as? String
+            if itemType == "function_call", let id = callId {
+                pendingCallIds.insert(id)
+            }
 
-                if itemType == "function_call" {
-                    if let sandbox = payload["sandbox_permissions"] as? String,
-                       sandbox == "require_escalated",
-                       let id = callId {
-                        pendingEscalationIds.insert(id)
-                    } else {
-                        hasPendingCall = true
-                    }
-                }
+            if itemType == "function_call_output", let id = callId {
+                pendingCallIds.remove(id)
 
-                // function_call_output completes a prior function_call
-                if itemType == "function_call_output", let id = callId {
-                    pendingEscalationIds.remove(id)
-                    hasPendingCall = false
+                // Detect sandbox denial — Codex outputs "failed in sandbox" when
+                // a command is blocked and needs user escalation/approval
+                if let output = payload["output"] as? String,
+                   output.contains("failed in sandbox") {
+                    hasSandboxFailure = true
+                } else {
+                    // Successful output clears prior sandbox failure state
+                    hasSandboxFailure = false
                 }
             }
         }
 
-        if !pendingEscalationIds.isEmpty { return .pending }
-        if hasPendingCall && fileAge < 10 { return .active }
+        // Sandbox failure with no subsequent successful call → needs approval
+        if hasSandboxFailure { return .pending }
+        // Unresolved function calls with recent activity → active
+        if !pendingCallIds.isEmpty && fileAge < 10 { return .active }
         if fileAge < 10 { return .active }
         return .idle
     }

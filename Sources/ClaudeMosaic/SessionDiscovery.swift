@@ -295,36 +295,40 @@ final class SessionDiscovery {
             options: [.skipsHiddenFiles]
         ) else { return nil }
 
-        // Codex stores sessions in per-project subdirectories named after the cwd.
-        // Match by checking if the jsonl path contains the project directory name,
-        // or by reading the first line for a cwd field.
-        let cwdDirName = URL(fileURLWithPath: cwd).lastPathComponent
-        var best: (path: String, date: Date)?
-        var fallback: (path: String, date: Date)?
+        // Match transcript to project by parsing session_meta.cwd from the first line.
+        // Score matches: exact > session is child of process cwd > process is child of session cwd.
+        var bestExact: (path: String, date: Date)?
+        var bestChild: (path: String, date: Date)?
 
         while let url = enumerator.nextObject() as? URL {
             guard url.pathExtension == "jsonl" else { continue }
-            guard let mod = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate else { continue }
+            guard let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
+                  let mod = attrs[.modificationDate] as? Date else { continue }
+            guard let sessionCWD = codexSessionCWD(path: url.path) else { continue }
 
-            // Check if this transcript belongs to the same project
-            let pathStr = url.path
-            if pathStr.contains(cwdDirName) || codexTranscriptMatchesCWD(path: pathStr, cwd: cwd) {
-                if best == nil || mod > best!.date { best = (pathStr, mod) }
-            } else {
-                if fallback == nil || mod > fallback!.date { fallback = (pathStr, mod) }
+            if sessionCWD == cwd {
+                if bestExact == nil || mod > bestExact!.date { bestExact = (url.path, mod) }
+            } else if sessionCWD.hasPrefix(cwd + "/") || cwd.hasPrefix(sessionCWD + "/") {
+                if bestChild == nil || mod > bestChild!.date { bestChild = (url.path, mod) }
             }
         }
-        // Prefer exact match, fall back to most recent only if no match found
-        return best?.path ?? fallback?.path
+        return bestExact?.path ?? bestChild?.path
     }
 
-    private func codexTranscriptMatchesCWD(path: String, cwd: String) -> Bool {
-        guard let fh = FileHandle(forReadingAtPath: path) else { return false }
+    /// Read session_meta from the first line of a Codex transcript to extract cwd.
+    private func codexSessionCWD(path: String) -> String? {
+        guard let fh = FileHandle(forReadingAtPath: path) else { return nil }
         defer { fh.closeFile() }
-        // Read first 4KB to find cwd in initial session metadata
-        let data = fh.readData(ofLength: 4096)
-        guard let head = String(data: data, encoding: .utf8) else { return false }
-        return head.contains(cwd)
+        // session_meta line can be very long (>4KB) due to embedded instructions
+        let data = fh.readData(ofLength: 65536)
+        guard let head = String(data: data, encoding: .utf8),
+              let firstLine = head.split(separator: "\n").first,
+              let jsonData = String(firstLine).data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
+              obj["type"] as? String == "session_meta",
+              let payload = obj["payload"] as? [String: Any],
+              let cwd = payload["cwd"] as? String else { return nil }
+        return cwd
     }
 
     private func mostRecentJSONL(in dir: String, excluding claimed: Set<String> = []) -> String? {
