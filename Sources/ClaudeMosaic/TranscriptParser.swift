@@ -120,10 +120,10 @@ enum TranscriptParser {
         let tail = readTail(path: path, maxBytes: 65536)
 
         // Track function_call / function_call_output pairing.
-        // A call is "pending" until its output arrives.
-        // Sandbox failures in output indicate the session needs user approval.
+        // Escalation requests have sandbox_permissions=require_escalated inside
+        // the JSON-encoded arguments string. These are pending until their output arrives.
         var pendingCallIds: Set<String> = []
-        var hasSandboxFailure = false
+        var pendingEscalationIds: Set<String> = []
 
         for line in tail.split(separator: "\n") {
             guard let obj = parseJSON(String(line)) else { continue }
@@ -134,25 +134,25 @@ enum TranscriptParser {
 
             if itemType == "function_call", let id = callId {
                 pendingCallIds.insert(id)
+
+                // Check if this is an escalation request by parsing arguments JSON
+                if let argsStr = payload["arguments"] as? String,
+                   let argsData = argsStr.data(using: .utf8),
+                   let args = try? JSONSerialization.jsonObject(with: argsData) as? [String: Any],
+                   let perms = args["sandbox_permissions"] as? String,
+                   perms == "require_escalated" {
+                    pendingEscalationIds.insert(id)
+                }
             }
 
             if itemType == "function_call_output", let id = callId {
                 pendingCallIds.remove(id)
-
-                // Detect sandbox denial — Codex outputs "failed in sandbox" when
-                // a command is blocked and needs user escalation/approval
-                if let output = payload["output"] as? String,
-                   output.contains("failed in sandbox") {
-                    hasSandboxFailure = true
-                } else {
-                    // Successful output clears prior sandbox failure state
-                    hasSandboxFailure = false
-                }
+                pendingEscalationIds.remove(id)
             }
         }
 
-        // Sandbox failure with no subsequent successful call → needs approval
-        if hasSandboxFailure { return .pending }
+        // Escalation request sent but no output yet → waiting for user approval
+        if !pendingEscalationIds.isEmpty { return .pending }
         // Unresolved function calls with recent activity → active
         if !pendingCallIds.isEmpty && fileAge < 10 { return .active }
         if fileAge < 10 { return .active }
