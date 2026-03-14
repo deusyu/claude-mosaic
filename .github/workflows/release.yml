@@ -6,47 +6,19 @@ on:
       - 'v*'
 
 jobs:
-  build:
-    strategy:
-      matrix:
-        include:
-          - runner: macos-13
-            arch: x86_64
-          - runner: macos-14
-            arch: arm64
-    runs-on: ${{ matrix.runner }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Build
-        run: swift build -c release
-
-      - name: Upload binary
-        uses: actions/upload-artifact@v4
-        with:
-          name: binary-${{ matrix.arch }}
-          path: .build/release/ClaudeMosaic
-
-  package:
-    needs: build
+  release:
     runs-on: macos-14
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download binaries
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: Create universal binary
+      - name: Build universal binary
         run: |
-          lipo -create \
-            artifacts/binary-arm64/ClaudeMosaic \
-            artifacts/binary-x86_64/ClaudeMosaic \
-            -output ClaudeMosaic
+          swift build -c release --arch arm64 --arch x86_64
+          cp .build/apple/Products/Release/ClaudeMosaic .
           chmod +x ClaudeMosaic
+          file ClaudeMosaic
 
       - name: Build .app bundle
         run: |
@@ -82,14 +54,12 @@ jobs:
       - name: Build .pkg installer
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          INSTALL_DIR="/Applications"
-          BINARY_PATH="$INSTALL_DIR/ClaudeMosaic.app/Contents/MacOS/ClaudeMosaic"
 
-          # Staging area for pkgbuild
+          # Staging area
           mkdir -p pkg-root/Applications
           cp -R ClaudeMosaic.app pkg-root/Applications/
 
-          # Post-install script: register launchd + hook
+          # Post-install script
           mkdir -p scripts
           cat > scripts/postinstall <<'SCRIPT'
           #!/bin/bash
@@ -98,10 +68,8 @@ jobs:
           USER_HOME=$(eval echo ~"$USER")
           PLIST="$USER_HOME/Library/LaunchAgents/$PLIST_LABEL.plist"
 
-          # Stop existing daemon
           launchctl bootout "gui/$(id -u)/$PLIST_LABEL" 2>/dev/null || true
 
-          # Create launchd plist
           mkdir -p "$USER_HOME/Library/LaunchAgents"
           cat > "$PLIST" <<EOF
           <?xml version="1.0" encoding="UTF-8"?>
@@ -127,17 +95,12 @@ jobs:
           </plist>
           EOF
 
-          # Start daemon
           launchctl bootstrap "gui/$(id -u)" "$PLIST" 2>/dev/null || true
-
-          # Register hook
           "$APP_BINARY" hooks-install --command "$APP_BINARY hook"
-
           exit 0
           SCRIPT
           chmod +x scripts/postinstall
 
-          # Build component pkg
           pkgbuild \
             --root pkg-root \
             --identifier com.claude.mosaic \
@@ -146,7 +109,6 @@ jobs:
             --install-location / \
             ClaudeMosaic-component.pkg
 
-          # Wrap in product pkg (nicer installer UI)
           productbuild \
             --package ClaudeMosaic-component.pkg \
             --identifier com.claude.mosaic \
