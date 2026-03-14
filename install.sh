@@ -62,7 +62,7 @@ cat > "$PLIST" << EOF
         <string>$APP_BINARY</string>
     </array>
     <key>KeepAlive</key>
-    <true/>
+    <false/>
     <key>RunAtLoad</key>
     <true/>
     <key>StandardOutPath</key>

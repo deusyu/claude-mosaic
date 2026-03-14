@@ -295,13 +295,36 @@ final class SessionDiscovery {
             options: [.skipsHiddenFiles]
         ) else { return nil }
 
+        // Codex stores sessions in per-project subdirectories named after the cwd.
+        // Match by checking if the jsonl path contains the project directory name,
+        // or by reading the first line for a cwd field.
+        let cwdDirName = URL(fileURLWithPath: cwd).lastPathComponent
         var best: (path: String, date: Date)?
+        var fallback: (path: String, date: Date)?
+
         while let url = enumerator.nextObject() as? URL {
             guard url.pathExtension == "jsonl" else { continue }
             guard let mod = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate else { continue }
-            if best == nil || mod > best!.date { best = (url.path, mod) }
+
+            // Check if this transcript belongs to the same project
+            let pathStr = url.path
+            if pathStr.contains(cwdDirName) || codexTranscriptMatchesCWD(path: pathStr, cwd: cwd) {
+                if best == nil || mod > best!.date { best = (pathStr, mod) }
+            } else {
+                if fallback == nil || mod > fallback!.date { fallback = (pathStr, mod) }
+            }
         }
-        return best?.path
+        // Prefer exact match, fall back to most recent only if no match found
+        return best?.path ?? fallback?.path
+    }
+
+    private func codexTranscriptMatchesCWD(path: String, cwd: String) -> Bool {
+        guard let fh = FileHandle(forReadingAtPath: path) else { return false }
+        defer { fh.closeFile() }
+        // Read first 4KB to find cwd in initial session metadata
+        let data = fh.readData(ofLength: 4096)
+        guard let head = String(data: data, encoding: .utf8) else { return false }
+        return head.contains(cwd)
     }
 
     private func mostRecentJSONL(in dir: String, excluding claimed: Set<String> = []) -> String? {

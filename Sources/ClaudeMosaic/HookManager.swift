@@ -61,18 +61,22 @@ enum HookManager {
         var changed = false
         for eventKey in hooks.keys {
             guard var matchers = hooks[eventKey] as? [[String: Any]] else { continue }
-            let before = matchers.count
-            matchers = matchers.filter { matcher in
-                guard let hookList = matcher["hooks"] as? [[String: Any]] else { return true }
-                return hookList.contains { hook in
+            // Filter individual hooks within each matcher, not whole matchers
+            matchers = matchers.compactMap { matcher -> [String: Any]? in
+                guard var hookList = matcher["hooks"] as? [[String: Any]] else { return matcher }
+                let before = hookList.count
+                hookList = hookList.filter { hook in
                     guard let cmd = hook["command"] as? String else { return true }
                     return !hookPatterns.contains(where: { cmd.contains($0) })
                 }
-            }
-            if matchers.count != before {
-                hooks[eventKey] = matchers
+                if hookList.count == before { return matcher }
                 changed = true
+                if hookList.isEmpty { return nil } // remove empty matcher
+                var updated = matcher
+                updated["hooks"] = hookList
+                return updated
             }
+            hooks[eventKey] = matchers
         }
 
         if changed {
@@ -122,12 +126,16 @@ enum HookManager {
 
         for eventKey in hooks.keys {
             guard var matchers = hooks[eventKey] as? [[String: Any]] else { continue }
-            matchers = matchers.filter { matcher in
-                guard let hookList = matcher["hooks"] as? [[String: Any]] else { return true }
-                return hookList.contains { hook in
+            matchers = matchers.compactMap { matcher -> [String: Any]? in
+                guard var hookList = matcher["hooks"] as? [[String: Any]] else { return matcher }
+                hookList = hookList.filter { hook in
                     guard let cmd = hook["command"] as? String else { return true }
                     return !legacyPatterns.contains(where: { cmd.contains($0) })
                 }
+                if hookList.isEmpty { return nil }
+                var updated = matcher
+                updated["hooks"] = hookList
+                return updated
             }
             hooks[eventKey] = matchers
         }
