@@ -21,6 +21,9 @@ struct ClaudeMosaicApp {
             case "hooks-uninstall":
                 let settings = flagValue(flag: "--settings", args: args)
                 HookManager.uninstallHooks(settingsPath: settings)
+            case "unregister":
+                AutoSetup.unregisterLoginItem()
+                print("Login item unregistered.")
             case "focus":
                 let terminal = flagValue(flag: "--terminal", args: args) ?? "unknown"
                 let tty = flagValue(flag: "--tty", args: args) ?? ""
@@ -123,6 +126,8 @@ class MosaicAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        AutoSetup.ensureSetup()
+
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.isVisible = false
 

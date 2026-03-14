@@ -24,8 +24,9 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           APP="ClaudeMosaic.app"
-          mkdir -p "$APP/Contents/MacOS"
+          mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
           cp ClaudeMosaic "$APP/Contents/MacOS/"
+          cp Sources/ClaudeMosaic/Resources/AppIcon.icns "$APP/Contents/Resources/"
 
           cat > "$APP/Contents/Info.plist" <<EOF
           <?xml version="1.0" encoding="UTF-8"?>
@@ -39,6 +40,8 @@ jobs:
               <string>Claude Mosaic</string>
               <key>CFBundleExecutable</key>
               <string>ClaudeMosaic</string>
+              <key>CFBundleIconFile</key>
+              <string>AppIcon</string>
               <key>CFBundleVersion</key>
               <string>$VERSION</string>
               <key>CFBundleShortVersionString</key>
@@ -51,73 +54,24 @@ jobs:
 
           codesign --force --deep -s - "$APP"
 
-      - name: Build .pkg installer
+      - name: Build .dmg
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
+          DMG_NAME="ClaudeMosaic-${VERSION}.dmg"
+          STAGING="dmg-staging"
 
-          # Staging area
-          mkdir -p pkg-root/Applications
-          cp -R ClaudeMosaic.app pkg-root/Applications/
+          mkdir -p "$STAGING"
+          cp -R ClaudeMosaic.app "$STAGING/"
+          ln -s /Applications "$STAGING/Applications"
 
-          # Post-install script
-          mkdir -p scripts
-          cat > scripts/postinstall <<'SCRIPT'
-          #!/bin/bash
-          APP_BINARY="/Applications/ClaudeMosaic.app/Contents/MacOS/ClaudeMosaic"
-          PLIST_LABEL="com.claude.claude-mosaic"
-          USER_HOME=$(eval echo ~"$USER")
-          PLIST="$USER_HOME/Library/LaunchAgents/$PLIST_LABEL.plist"
-
-          launchctl bootout "gui/$(id -u)/$PLIST_LABEL" 2>/dev/null || true
-
-          mkdir -p "$USER_HOME/Library/LaunchAgents"
-          cat > "$PLIST" <<EOF
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
-            "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-              <key>Label</key>
-              <string>$PLIST_LABEL</string>
-              <key>ProgramArguments</key>
-              <array>
-                  <string>$APP_BINARY</string>
-              </array>
-              <key>KeepAlive</key>
-              <false/>
-              <key>RunAtLoad</key>
-              <true/>
-              <key>StandardOutPath</key>
-              <string>/tmp/claude-mosaic.out.log</string>
-              <key>StandardErrorPath</key>
-              <string>/tmp/claude-mosaic.err.log</string>
-          </dict>
-          </plist>
-          EOF
-
-          launchctl bootstrap "gui/$(id -u)" "$PLIST" 2>/dev/null || true
-          "$APP_BINARY" hooks-install --command "$APP_BINARY hook"
-          exit 0
-          SCRIPT
-          chmod +x scripts/postinstall
-
-          pkgbuild \
-            --root pkg-root \
-            --identifier com.claude.mosaic \
-            --version "$VERSION" \
-            --scripts scripts \
-            --install-location / \
-            ClaudeMosaic-component.pkg
-
-          productbuild \
-            --package ClaudeMosaic-component.pkg \
-            --identifier com.claude.mosaic \
-            --version "$VERSION" \
-            "ClaudeMosaic-${VERSION}.pkg"
+          hdiutil create -volname "Claude Mosaic" \
+            -srcfolder "$STAGING" \
+            -ov -format UDZO \
+            "$DMG_NAME"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
           files: |
-            ClaudeMosaic-[0-9]*.pkg
+            ClaudeMosaic-[0-9]*.dmg

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Install claude-mosaic: build, bundle .app, start daemon, register hook.
+# Install claude-mosaic: build, bundle .app, launch.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -8,7 +8,6 @@ BINARY="$BUILD_DIR/ClaudeMosaic"
 APP_BUNDLE="$BUILD_DIR/ClaudeMosaic.app"
 APP_BINARY="$APP_BUNDLE/Contents/MacOS/ClaudeMosaic"
 PLIST_LABEL="com.claude.claude-mosaic"
-PLIST="$HOME/Library/LaunchAgents/$PLIST_LABEL.plist"
 
 # 1. Build
 echo "Building claude-mosaic..."
@@ -22,8 +21,9 @@ fi
 
 # 2. Create .app bundle
 echo "Creating app bundle..."
-mkdir -p "$APP_BUNDLE/Contents/MacOS"
+mkdir -p "$APP_BUNDLE/Contents/MacOS" "$APP_BUNDLE/Contents/Resources"
 cp "$BINARY" "$APP_BINARY"
+cp "$SCRIPT_DIR/Sources/ClaudeMosaic/Resources/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/"
 
 cat > "$APP_BUNDLE/Contents/Info.plist" << 'PLISTEOF'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -36,6 +36,8 @@ cat > "$APP_BUNDLE/Contents/Info.plist" << 'PLISTEOF'
     <string>Claude Mosaic</string>
     <key>CFBundleExecutable</key>
     <string>ClaudeMosaic</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>CFBundleVersion</key>
     <string>1.0</string>
     <key>LSUIElement</key>
@@ -48,35 +50,9 @@ echo "App bundle: $APP_BUNDLE"
 
 # 3. Stop existing daemon if running
 launchctl bootout "gui/$(id -u)/$PLIST_LABEL" 2>/dev/null || true
+rm -f "$HOME/Library/LaunchAgents/$PLIST_LABEL.plist"
 
-# 4. Create launchd plist — launch the .app binary
-cat > "$PLIST" << EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>$PLIST_LABEL</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>$APP_BINARY</string>
-    </array>
-    <key>KeepAlive</key>
-    <false/>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>StandardOutPath</key>
-    <string>/tmp/claude-mosaic.out.log</string>
-    <key>StandardErrorPath</key>
-    <string>/tmp/claude-mosaic.err.log</string>
-</dict>
-</plist>
-EOF
+# 4. Launch — app auto-registers login item and hooks on startup
+open "$APP_BUNDLE"
 
-# 5. Start daemon
-launchctl bootstrap "gui/$(id -u)" "$PLIST"
-echo "Started daemon: $PLIST_LABEL"
-
-# 6. Register SessionStart hook (use raw binary for CLI commands)
-"$BINARY" hooks-install --command "$BINARY hook"
-echo "Installation complete."
+echo "Installation complete. App is running and will start at login."

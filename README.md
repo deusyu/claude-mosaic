@@ -14,20 +14,23 @@ Each running session appears as a colored tile in the menu bar — green for act
 - **Pending alerts** — plays a sound and flashes the dock icon when a session needs input
 - **Terminal focusing** — click a tile to switch to the right iTerm2/Ghostty/Alacritty/Terminal.app window
 - **Hook integration** — `SessionStart` hook maps each TTY to its transcript for precise multi-session tracking
+- **Auto setup** — registers login item and hooks on first launch, no manual config needed
 - **Dark/light mode** — adaptive colors via system `NSColor`
 - **Provider branding** — Claude (#D97757) and Codex (#10A37F) with distinct colors
 
 ## Install
 
+### From release (recommended)
+
+Download the `.dmg` from [Releases](https://github.com/deusyu/claude-mosaic/releases), open it, and drag `ClaudeMosaic.app` to Applications. Launch the app — it auto-configures hooks and login item.
+
+### From source
+
 ```bash
 ./install.sh
 ```
 
-This will:
-1. Build the Swift package (`swift build -c release`)
-2. Create a `.app` bundle for proper system identity
-3. Register a `launchd` agent to start at login
-4. Install the `SessionStart` hook in `~/.claude/settings.json`
+This builds the Swift package, creates a `.app` bundle, and launches it. The app auto-registers as a login item and installs the `SessionStart` hook.
 
 ## Uninstall
 
@@ -45,6 +48,7 @@ claude-mosaic focus             Focus terminal window
 claude-mosaic demo [N]          Demo mode with N sessions
 claude-mosaic hooks-install     Register hook in settings.json
 claude-mosaic hooks-uninstall   Remove hooks from settings.json
+claude-mosaic unregister        Remove login item registration
 ```
 
 ## How it works
@@ -77,6 +81,7 @@ Sources/ClaudeMosaic/
   TranscriptParser.swift JSONL status parsing for Claude and Codex
   TerminalFocus.swift    AppleScript terminal window focusing
   HookManager.swift      Hook install/uninstall/handler
+  AutoSetup.swift        First-launch setup: login item + hooks
   Shell.swift            Shared shell and AppleScript helpers
 ```
 

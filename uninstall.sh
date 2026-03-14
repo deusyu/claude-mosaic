@@ -2,22 +2,40 @@
 # Uninstall claude-mosaic
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-BINARY="$SCRIPT_DIR/.build/release/ClaudeMosaic"
 PLIST_LABEL="com.claude.claude-mosaic"
 PLIST="$HOME/Library/LaunchAgents/$PLIST_LABEL.plist"
 
-# 1. Stop daemon
-launchctl bootout "gui/$(id -u)/$PLIST_LABEL" 2>/dev/null || true
-rm -f "$PLIST"
-echo "Removed daemon."
+# Find the binary (dev build or /Applications)
+BINARY=""
+for candidate in \
+    "$(cd "$(dirname "$0")" && pwd)/.build/release/ClaudeMosaic" \
+    "/Applications/ClaudeMosaic.app/Contents/MacOS/ClaudeMosaic"; do
+    if [[ -x "$candidate" ]]; then
+        BINARY="$candidate"
+        break
+    fi
+done
 
-# 2. Uninstall hooks
-if [[ -x "$BINARY" ]]; then
-    "$BINARY" hooks-uninstall
+# 1. Unregister login item and hooks
+if [[ -n "$BINARY" ]]; then
+    "$BINARY" unregister 2>/dev/null || true
+    "$BINARY" hooks-uninstall 2>/dev/null || true
 fi
 
-# 3. Clean state files
+# 2. Remove legacy launchd plist if present
+launchctl bootout "gui/$(id -u)/$PLIST_LABEL" 2>/dev/null || true
+rm -f "$PLIST"
+
+# 3. Kill running process
+pkill -x ClaudeMosaic 2>/dev/null || true
+
+# 4. Clean state files
 rm -rf "$HOME/.claude/claude-mosaic"
-echo "Cleaned state files."
+
+# 5. Remove app bundle
+if [[ -d "/Applications/ClaudeMosaic.app" ]]; then
+    rm -rf "/Applications/ClaudeMosaic.app"
+    echo "Removed /Applications/ClaudeMosaic.app"
+fi
+
 echo "Uninstall complete."
