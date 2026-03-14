@@ -118,6 +118,7 @@ class MosaicAppDelegate: NSObject, NSApplicationDelegate {
     var demoCount: Int?
     var previousStatuses: [String: SessionStatus] = [:]
     var isPolling = false
+    var pollStartTime: Date?
 
     var sessions: [SessionInfo] {
         get { store.sessions }
@@ -166,12 +167,21 @@ class MosaicAppDelegate: NSObject, NSApplicationDelegate {
             updateUI()
             return
         }
-        guard !isPolling else { return }
+        if isPolling {
+            // Release stuck poll after 10s
+            if let start = pollStartTime, Date().timeIntervalSince(start) > 10 {
+                isPolling = false
+            } else {
+                return
+            }
+        }
         isPolling = true
+        pollStartTime = Date()
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let result = SessionDiscovery.shared.discoverAll()
             DispatchQueue.main.async {
                 self?.isPolling = false
+                self?.pollStartTime = nil
                 self?.sessions = result
                 self?.updateUI()
             }
@@ -226,6 +236,10 @@ class MosaicAppDelegate: NSObject, NSApplicationDelegate {
             previousStatuses.removeAll()
             return
         }
+
+        // Prune stale entries for ttys no longer present
+        let currentTTYs = Set(sessions.map(\.tty))
+        previousStatuses = previousStatuses.filter { currentTTYs.contains($0.key) }
 
         for session in sessions {
             let prev = previousStatuses[session.tty]
