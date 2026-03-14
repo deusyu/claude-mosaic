@@ -116,9 +116,10 @@ class MosaicAppDelegate: NSObject, NSApplicationDelegate {
     let store = SessionStore()
     var demoMode = false
     var demoCount: Int?
+    /// Keyed by "tty:pid" to detect tty reuse across different processes.
     var previousStatuses: [String: SessionStatus] = [:]
-    var isPolling = false
-    var pollStartTime: Date?
+    var pollGeneration: UInt64 = 0
+    var pollInFlight = false
 
     var sessions: [SessionInfo] {
         get { store.sessions }
@@ -167,23 +168,18 @@ class MosaicAppDelegate: NSObject, NSApplicationDelegate {
             updateUI()
             return
         }
-        if isPolling {
-            // Release stuck poll after 10s
-            if let start = pollStartTime, Date().timeIntervalSince(start) > 10 {
-                isPolling = false
-            } else {
-                return
-            }
-        }
-        isPolling = true
-        pollStartTime = Date()
+        guard !pollInFlight else { return }
+        pollInFlight = true
+        pollGeneration &+= 1
+        let gen = pollGeneration
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let result = SessionDiscovery.shared.discoverAll()
             DispatchQueue.main.async {
-                self?.isPolling = false
-                self?.pollStartTime = nil
-                self?.sessions = result
-                self?.updateUI()
+                guard let self else { return }
+                self.pollInFlight = false
+                guard gen == self.pollGeneration else { return }
+                self.sessions = result
+                self.updateUI()
             }
         }
     }
@@ -237,18 +233,18 @@ class MosaicAppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        // Prune stale entries for ttys no longer present
-        let currentTTYs = Set(sessions.map(\.tty))
-        previousStatuses = previousStatuses.filter { currentTTYs.contains($0.key) }
-
+        // Rebuild with tty:pid keys — naturally handles tty reuse and stale entries
+        var newStatuses: [String: SessionStatus] = [:]
         for session in sessions {
-            let prev = previousStatuses[session.tty]
+            let key = "\(session.tty):\(session.pid)"
+            let prev = previousStatuses[key]
             if session.status == .pending && prev != nil && prev != .pending {
                 NSSound(named: "Glass")?.play()
                 NSApp.requestUserAttention(.informationalRequest)
             }
-            previousStatuses[session.tty] = session.status
+            newStatuses[key] = session.status
         }
+        previousStatuses = newStatuses
 
         statusItem.isVisible = true
         updateIcon()

@@ -35,9 +35,8 @@ enum HookManager {
         let path = settingsPath ?? "\(home)/.claude/settings.json"
         var settings = loadSettings(path: path)
 
-        // Remove all existing claude-mosaic/legacy hooks before (re)installing.
-        // This handles upgrades where the command string changed (e.g. quoting).
-        cleanHooksByPattern(settings: &settings, patterns: hookPatterns)
+        // Only clean our hooks from SessionStart, not other events.
+        cleanHooksInEvent(settings: &settings, event: "SessionStart", patterns: hookPatterns)
 
         if hookExists(settings: settings, command: command) {
             print("Hook already installed.")
@@ -122,25 +121,38 @@ enum HookManager {
         }
     }
 
+    /// Remove matching hooks from a single event only (used by installHook).
+    private static func cleanHooksInEvent(settings: inout [String: Any], event: String, patterns: [String]) {
+        guard var hooks = settings["hooks"] as? [String: Any],
+              var matchers = hooks[event] as? [[String: Any]] else { return }
+        matchers = filterMatchers(matchers, removing: patterns)
+        hooks[event] = matchers
+        settings["hooks"] = hooks
+    }
+
+    /// Remove matching hooks from all events (used by uninstallHooks).
     private static func cleanHooksByPattern(settings: inout [String: Any], patterns: [String]) {
         guard var hooks = settings["hooks"] as? [String: Any] else { return }
-
         for eventKey in hooks.keys {
             guard var matchers = hooks[eventKey] as? [[String: Any]] else { continue }
-            matchers = matchers.compactMap { matcher -> [String: Any]? in
-                guard var hookList = matcher["hooks"] as? [[String: Any]] else { return matcher }
-                hookList = hookList.filter { hook in
-                    guard let cmd = hook["command"] as? String else { return true }
-                    return !patterns.contains(where: { cmd.contains($0) })
-                }
-                if hookList.isEmpty { return nil }
-                var updated = matcher
-                updated["hooks"] = hookList
-                return updated
-            }
+            matchers = filterMatchers(matchers, removing: patterns)
             hooks[eventKey] = matchers
         }
         settings["hooks"] = hooks
+    }
+
+    private static func filterMatchers(_ matchers: [[String: Any]], removing patterns: [String]) -> [[String: Any]] {
+        matchers.compactMap { matcher -> [String: Any]? in
+            guard var hookList = matcher["hooks"] as? [[String: Any]] else { return matcher }
+            hookList = hookList.filter { hook in
+                guard let cmd = hook["command"] as? String else { return true }
+                return !patterns.contains(where: { cmd.contains($0) })
+            }
+            if hookList.isEmpty { return nil }
+            var updated = matcher
+            updated["hooks"] = hookList
+            return updated
+        }
     }
 
     private static func loadSettings(path: String) -> [String: Any] {
