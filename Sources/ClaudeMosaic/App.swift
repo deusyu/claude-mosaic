@@ -113,9 +113,7 @@ class MosaicAppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem!
     var pollTimer: Timer?
     var animTimer: Timer?
-    var popover: NSPopover!
     let store = SessionStore()
-    var eventMonitor: Any?
     var demoMode = false
     var demoCount: Int?
     var previousStatuses: [String: SessionStatus] = [:]
@@ -131,20 +129,10 @@ class MosaicAppDelegate: NSObject, NSApplicationDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.isVisible = false
 
-        popover = NSPopover()
-        popover.behavior = .transient
-        popover.animates = false
-
-        let hostingController = NSHostingController(rootView: MosaicPanelView(
-            store: store,
-            onFocus: { session in TerminalFocus.focus(session: session) },
-            onQuit: { NSApplication.shared.terminate(nil) }
-        ))
-        popover.contentViewController = hostingController
-
         if let button = statusItem.button {
-            button.action = #selector(togglePopover)
+            button.action = #selector(showMenu)
             button.target = self
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
 
         pollAndUpdate()
@@ -152,12 +140,6 @@ class MosaicAppDelegate: NSObject, NSApplicationDelegate {
             self?.pollAndUpdate()
         }
         RunLoop.main.add(pollTimer!, forMode: .common)
-
-        eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
-            if let popover = self?.popover, popover.isShown {
-                popover.performClose(nil)
-            }
-        }
     }
 
     // MARK: - Polling
@@ -252,18 +234,41 @@ class MosaicAppDelegate: NSObject, NSApplicationDelegate {
 
         statusItem.isVisible = true
         updateIcon()
-        updatePopoverSize()
 
         let needsAnim = sessions.contains { $0.status == .pending || $0.status == .idle }
         if needsAnim { startAnimation() } else { stopAnimation() }
     }
 
-    func updatePopoverSize() {
+    func buildMenu() -> NSMenu {
+        let menu = NSMenu()
+        let item = NSMenuItem()
         let rows = max((sessions.count + 1) / 2, 1)
         let gridHeight = CGFloat(rows) * 64
         let totalHeight = min(36 + gridHeight + 28, 460)
-        popover.contentSize = NSSize(width: 320, height: totalHeight)
+        let view = NSHostingView(rootView: MosaicPanelView(
+            store: store,
+            onFocus: { session in
+                menu.cancelTracking()
+                TerminalFocus.focus(session: session)
+            },
+            onQuit: {
+                menu.cancelTracking()
+                NSApplication.shared.terminate(nil)
+            }
+        ))
+        view.frame = NSRect(x: 0, y: 0, width: 320, height: totalHeight)
+        item.view = view
+        menu.addItem(item)
+        return menu
     }
+
+    @objc func showMenu() {
+        let menu = buildMenu()
+        statusItem.menu = menu
+        statusItem.button?.performClick(nil)
+        statusItem.menu = nil
+    }
+
 
     // MARK: - Menu Bar Icon
 
@@ -356,15 +361,7 @@ class MosaicAppDelegate: NSObject, NSApplicationDelegate {
         animTimer = nil
     }
 
-    // MARK: - Popover
-
-    @objc func togglePopover() {
-        guard let button = statusItem.button else { return }
-        if popover.isShown {
-            popover.performClose(nil)
-        } else {
-            updatePopoverSize()
-            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-        }
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        return false
     }
 }

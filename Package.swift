@@ -8,7 +8,10 @@ let package = Package(
         .executableTarget(
             name: "ClaudeMosaic",
             path: "Sources/ClaudeMosaic",
-            resources: [.copy("Resources")]
+            resources: [
+                .process("Resources/Assets.xcassets"),
+                .copy("Resources/AppIcon.icns")
+            ]
         )
     ]
 )

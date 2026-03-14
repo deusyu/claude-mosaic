@@ -9,7 +9,7 @@ PLIST="$HOME/Library/LaunchAgents/$PLIST_LABEL.plist"
 BINARY=""
 for candidate in \
     "$(cd "$(dirname "$0")" && pwd)/.build/release/ClaudeMosaic" \
-    "/Applications/ClaudeMosaic.app/Contents/MacOS/ClaudeMosaic"; do
+    "/Applications/Claude Mosaic.app/Contents/MacOS/ClaudeMosaic"; do
     if [[ -x "$candidate" ]]; then
         BINARY="$candidate"
         break
@@ -33,9 +33,11 @@ pkill -x ClaudeMosaic 2>/dev/null || true
 rm -rf "$HOME/.claude/claude-mosaic"
 
 # 5. Remove app bundle
-if [[ -d "/Applications/ClaudeMosaic.app" ]]; then
-    rm -rf "/Applications/ClaudeMosaic.app"
-    echo "Removed /Applications/ClaudeMosaic.app"
-fi
+for app in "/Applications/Claude Mosaic.app" "/Applications/ClaudeMosaic.app"; do
+    if [[ -d "$app" ]]; then
+        rm -rf "$app"
+        echo "Removed $app"
+    fi
+done
 
 echo "Uninstall complete."

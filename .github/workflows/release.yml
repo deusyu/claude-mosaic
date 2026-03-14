@@ -23,7 +23,7 @@ jobs:
       - name: Build .app bundle
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          APP="ClaudeMosaic.app"
+          APP="Claude Mosaic.app"
           mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
           cp ClaudeMosaic "$APP/Contents/MacOS/"
           cp Sources/ClaudeMosaic/Resources/AppIcon.icns "$APP/Contents/Resources/"
@@ -37,6 +37,8 @@ jobs:
               <key>CFBundleIdentifier</key>
               <string>com.claude.mosaic</string>
               <key>CFBundleName</key>
+              <string>Claude Mosaic</string>
+              <key>CFBundleDisplayName</key>
               <string>Claude Mosaic</string>
               <key>CFBundleExecutable</key>
               <string>ClaudeMosaic</string>
@@ -61,7 +63,7 @@ jobs:
           STAGING="dmg-staging"
 
           mkdir -p "$STAGING"
-          cp -R ClaudeMosaic.app "$STAGING/"
+          cp -R "Claude Mosaic.app" "$STAGING/"
           ln -s /Applications "$STAGING/Applications"
 
           hdiutil create -volname "Claude Mosaic" \

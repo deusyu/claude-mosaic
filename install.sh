@@ -5,7 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BUILD_DIR="$SCRIPT_DIR/.build/release"
 BINARY="$BUILD_DIR/ClaudeMosaic"
-APP_BUNDLE="$BUILD_DIR/ClaudeMosaic.app"
+APP_BUNDLE="$BUILD_DIR/Claude Mosaic.app"
 APP_BINARY="$APP_BUNDLE/Contents/MacOS/ClaudeMosaic"
 PLIST_LABEL="com.claude.claude-mosaic"
 
@@ -33,6 +33,8 @@ cat > "$APP_BUNDLE/Contents/Info.plist" << 'PLISTEOF'
     <key>CFBundleIdentifier</key>
     <string>com.claude.mosaic</string>
     <key>CFBundleName</key>
+    <string>Claude Mosaic</string>
+    <key>CFBundleDisplayName</key>
     <string>Claude Mosaic</string>
     <key>CFBundleExecutable</key>
     <string>ClaudeMosaic</string>
